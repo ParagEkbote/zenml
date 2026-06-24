@@ -148,6 +148,10 @@ def map_reduce():
     reducer(results)               # pass list of artifacts directly
 ```
 
+For a complete agentic workflow that combines dynamic mapping, reduction, and a
+human approval gate, see the
+[`agentic_hitl_pipeline` example](https://github.com/zenml-io/zenml/tree/main/examples/agentic_hitl_pipeline).
+
 Key points:
 - `step.map(...)` fans out a step over sequence-like inputs. These inputs can be either
   - a single list-like output artifact (see the code sample above)
@@ -279,7 +283,7 @@ def custom_loop():
 
 ### Parallel Step Execution
 
-Dynamic pipelines support true parallel execution using `step.submit()`. This method returns a `StepRunFuture` that you can use to wait for results or pass to downstream steps:
+Dynamic pipelines support true parallel execution using `step.submit()`. This method returns a `StepFuture` that you can use to wait for results or pass to downstream steps:
 
 ```python
 from zenml import step, pipeline
@@ -307,11 +311,11 @@ def dynamic_pipeline():
         some_step.submit(arg=idx)
 ```
 
-The `StepRunFuture` object provides several methods:
+The `StepFuture` object provides several methods:
 
 - **`result()`**: Wait for the step to complete and return the artifact response(s)
 - **`load()`**: Wait for the step to complete and load the actual artifact data
-- **Pass directly**: You can pass a `StepRunFuture` directly to downstream steps, and ZenML will automatically wait for it
+- **Pass directly**: You can pass a `StepFuture` directly to downstream steps, and ZenML will automatically wait for it
 
 {% hint style="info" %}
 When using `step.submit()`, steps with `runtime="isolated"` will execute in separate containers/processes, while steps with `runtime="inline"` will execute in separate threads within the orchestration environment.
@@ -513,7 +517,7 @@ Client().trigger_pipeline(snapshot_id=<ID>, run_configuration={"parameters": {"m
 
 ### Execution modes and error handling
 
-- The `CONTINUE_ON_FAILURE` execution mode is currently not supported in dynamic pipelines. Instead, you can use `try...except` to catch step exceptions and continue the pipeline.
+- The `CONTINUE_ON_FAILURE` execution mode is currently not supported in dynamic pipelines. Instead, you can use `try...except` to catch step exceptions and continue the pipeline. When you await a step explicitly (a synchronous call, or `future.result()` / `future.wait()`), the exception raised inside the step propagates as-is. When a failure surfaces implicitly (a failed future passed as a step input or to `after=`, or a submitted step still running when the pipeline function returns), ZenML raises a `StepExecutionException` whose `original_exception` holds the underlying error.
 - When using the `FAIL_FAST` execution mode, failure of a step does not immediately cancel other other **inline** steps. Instead, they continue executing until finished. **Isolated** steps on the other hand will be shut down immediately.
 
 ### Orchestrator Support

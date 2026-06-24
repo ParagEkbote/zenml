@@ -13,11 +13,13 @@
 #  permissions and limitations under the License.
 """Test zenml pipeline CLI commands."""
 
+import os
+import subprocess
 from uuid import uuid4
 
 import pytest
-from click.testing import CliRunner
 
+from tests.cli_runner_utils import cli_runner
 from zenml.cli.cli import cli
 from zenml.client import Client
 from zenml.config import DockerSettings
@@ -37,7 +39,7 @@ from zenml.utils.pipeline_docker_image_builder import (
 
 def test_pipeline_list(clean_client_with_run):
     """Test that zenml pipeline list does not fail."""
-    runner = CliRunner()
+    runner = cli_runner()
     list_command = cli.commands["pipeline"].commands["list"]
     result = runner.invoke(list_command)
     assert result.exit_code == 0
@@ -48,7 +50,7 @@ def test_pipeline_delete(clean_client_with_run: Client):
     existing_pipelines = clean_client_with_run.list_pipelines()
     assert len(existing_pipelines) == 1
     pipeline_name = existing_pipelines[0].name
-    runner = CliRunner()
+    runner = cli_runner()
     delete_command = cli.commands["pipeline"].commands["delete"]
     result = runner.invoke(delete_command, [pipeline_name, "-y"])
     assert result.exit_code == 0
@@ -70,10 +72,51 @@ def test_pipeline_delete(clean_client_with_run: Client):
 
 def test_pipeline_run_list(clean_client_with_run):
     """Test that zenml pipeline runs list does not fail."""
-    runner = CliRunner()
+    runner = cli_runner()
     list_command = cli.commands["pipeline"].commands["runs"].commands["list"]
     result = runner.invoke(list_command)
     assert result.exit_code == 0
+
+
+def test_pipeline_run_list_returns_newest_first(clean_client_with_run: Client):
+    """Test that pipeline runs are listed newest-first by default."""
+    runner = cli_runner()
+    run_command = cli.commands["pipeline"].commands["run"]
+
+    pipeline_id = pipeline_instance.register().id
+
+    # Create two runs
+    assert (
+        runner.invoke(run_command, [pipeline_instance_source]).exit_code == 0
+    )
+    assert (
+        runner.invoke(run_command, [pipeline_instance_source]).exit_code == 0
+    )
+
+    # List only the most recent run through the real CLI entrypoint. The
+    # in-process Click runner can miss output that intentionally bypasses
+    # redirected stdout to keep command output pipeable for users.
+    result = subprocess.run(
+        [
+            "zenml",
+            "pipeline",
+            "runs",
+            "list",
+            "--pipeline_id",
+            str(pipeline_id),
+            "--size",
+            "1",
+            "--columns",
+            "name",
+        ],
+        capture_output=True,
+        env={**os.environ, "ZENML_DISABLE_PAGER": "1"},
+        text=True,
+    )
+    assert result.returncode == 0
+
+    newest_run = Client().list_pipeline_runs(pipeline_id=pipeline_id)[0]
+    assert newest_run.name in result.stdout
 
 
 def test_pipeline_run_delete(clean_client_with_run):
@@ -81,7 +124,7 @@ def test_pipeline_run_delete(clean_client_with_run):
     existing_runs = clean_client_with_run.list_pipeline_runs()
     assert len(existing_runs) == 1
     run_name = existing_runs[0].name
-    runner = CliRunner()
+    runner = cli_runner()
     delete_command = (
         cli.commands["pipeline"].commands["runs"].commands["delete"]
     )
@@ -95,7 +138,7 @@ def test_pipeline_run_delete(clean_client_with_run):
 
 def test_pipeline_schedule_list(clean_client_with_scheduled_run):
     """Test that `zenml pipeline schedules list` does not fail."""
-    runner = CliRunner()
+    runner = cli_runner()
     list_command = (
         cli.commands["pipeline"].commands["schedule"].commands["list"]
     )
@@ -109,7 +152,7 @@ def test_pipeline_schedule_delete(clean_client_with_scheduled_run):
     existing_schedules = clean_client_with_scheduled_run.list_schedules()
     assert len(existing_schedules) == 1
     schedule_name = existing_schedules[0].name
-    runner = CliRunner()
+    runner = cli_runner()
     delete_command = (
         cli.commands["pipeline"].commands["schedule"].commands["delete"]
     )
@@ -147,7 +190,7 @@ pipeline_instance_source = f"{s.__module__}.pipeline_instance"
 
 def test_pipeline_registration_without_repo(clean_client):
     """Tests that the register command outside a repo works."""
-    runner = CliRunner()
+    runner = cli_runner()
     register_command = cli.commands["pipeline"].commands["register"]
 
     result = runner.invoke(register_command, [pipeline_instance_source])
@@ -156,7 +199,7 @@ def test_pipeline_registration_without_repo(clean_client):
 
 def test_pipeline_registration_with_repo(clean_client: "Client"):
     """Tests the register command inside a repo."""
-    runner = CliRunner()
+    runner = cli_runner()
     register_command = cli.commands["pipeline"].commands["register"]
 
     # Invalid source string
@@ -183,7 +226,7 @@ def test_pipeline_registration_with_repo(clean_client: "Client"):
 
 def test_pipeline_build_without_repo(clean_client):
     """Tests that the build command outside a repo works."""
-    runner = CliRunner()
+    runner = cli_runner()
     build_command = cli.commands["pipeline"].commands["build"]
 
     result = runner.invoke(build_command, [pipeline_instance_source])
@@ -194,7 +237,7 @@ def test_pipeline_build_with_invalid_pipeline_source__fails(
     clean_client: "Client",
 ):
     """Tests that the build command fails if the pipeline source is invalid."""
-    runner = CliRunner()
+    runner = cli_runner()
     build_command = cli.commands["pipeline"].commands["build"]
 
     # name of unregistered pipeline
@@ -219,7 +262,7 @@ def test_pipeline_build_writes_output_file(
         return_value=("image_name", "", ""),
     )
 
-    runner = CliRunner()
+    runner = cli_runner()
     build_command = cli.commands["pipeline"].commands["build"]
 
     output_path = str(tmp_path / "output.yaml")
@@ -241,7 +284,7 @@ def test_pipeline_build_doesnt_write_output_file_if_no_build_needed(
     if no build was needed for the pipeline."""
     mocker.patch.object(Stack, "get_docker_builds", return_value=[])
 
-    runner = CliRunner()
+    runner = cli_runner()
     build_command = cli.commands["pipeline"].commands["build"]
 
     output_path = tmp_path / "output.yaml"
@@ -260,7 +303,7 @@ def test_pipeline_build_with_config_file(
         Stack, "get_docker_builds", return_value=[]
     )
 
-    runner = CliRunner()
+    runner = cli_runner()
     build_command = cli.commands["pipeline"].commands["build"]
 
     config_path = tmp_path / "config.yaml"
@@ -301,7 +344,7 @@ def test_pipeline_build_with_different_stack(clean_client: "Client", mocker):
     }
     new_stack = Client().create_stack(name="new", components=components)
 
-    runner = CliRunner()
+    runner = cli_runner()
     build_command = cli.commands["pipeline"].commands["build"]
 
     pipeline_id = pipeline_instance.register().id
@@ -318,7 +361,7 @@ def test_pipeline_build_with_different_stack(clean_client: "Client", mocker):
 
 def test_pipeline_run_without_repo(clean_client):
     """Tests that the run command outside a repo works."""
-    runner = CliRunner()
+    runner = cli_runner()
     run_command = cli.commands["pipeline"].commands["run"]
 
     result = runner.invoke(run_command, [pipeline_instance_source])
@@ -327,7 +370,7 @@ def test_pipeline_run_without_repo(clean_client):
 
 def test_pipeline_run_with_wrong_source_fails(clean_client: "Client"):
     """Tests that the run command fails if the pipeline source is invalid."""
-    runner = CliRunner()
+    runner = cli_runner()
     run_command = cli.commands["pipeline"].commands["run"]
     # name of unregistered pipeline
     assert (
@@ -338,7 +381,7 @@ def test_pipeline_run_with_wrong_source_fails(clean_client: "Client"):
 
 def test_pipeline_run_with_config_file(clean_client: "Client", tmp_path):
     """Tests that the run command works with a run config file."""
-    runner = CliRunner()
+    runner = cli_runner()
     run_command = cli.commands["pipeline"].commands["run"]
 
     pipeline_id = pipeline_instance.register().id
@@ -359,7 +402,7 @@ def test_pipeline_run_with_config_file(clean_client: "Client", tmp_path):
 
 def test_pipeline_run_with_different_stack(clean_client: "Client"):
     """Tests that the run command works with a different stack."""
-    runner = CliRunner()
+    runner = cli_runner()
     run_command = cli.commands["pipeline"].commands["run"]
 
     pipeline_id = pipeline_instance.register().id
@@ -382,7 +425,7 @@ def test_pipeline_run_with_different_stack(clean_client: "Client"):
 
 def test_pipeline_run_with_invalid_build_id_fails(clean_client: "Client"):
     """Tests that the run command with an invalid build id fails."""
-    runner = CliRunner()
+    runner = cli_runner()
     run_command = cli.commands["pipeline"].commands["run"]
 
     pipeline_instance.register().id
@@ -401,7 +444,7 @@ def test_pipeline_run_with_invalid_build_id_fails(clean_client: "Client"):
 
 def test_pipeline_run_with_custom_build_id(clean_client: "Client"):
     """Tests that the run command works with a custom build id."""
-    runner = CliRunner()
+    runner = cli_runner()
     run_command = cli.commands["pipeline"].commands["run"]
 
     pipeline_id = pipeline_instance.register().id
@@ -427,7 +470,7 @@ def test_pipeline_run_with_custom_build_id(clean_client: "Client"):
 
 def test_pipeline_run_with_custom_build_file(clean_client: "Client", tmp_path):
     """Tests that the run command works with a custom build file."""
-    runner = CliRunner()
+    runner = cli_runner()
     run_command = cli.commands["pipeline"].commands["run"]
 
     pipeline_id = pipeline_instance.register().id
@@ -453,7 +496,7 @@ def test_pipeline_run_with_custom_build_file(clean_client: "Client", tmp_path):
 
 def test_pipeline_build_list(clean_client: "Client"):
     """Test that `zenml pipeline builds list` does not fail."""
-    runner = CliRunner()
+    runner = cli_runner()
     list_command = cli.commands["pipeline"].commands["builds"].commands["list"]
     assert runner.invoke(list_command).exit_code == 0
 
@@ -480,7 +523,7 @@ def test_pipeline_build_delete(clean_client: "Client"):
     )
     build_id = clean_client.zen_store.create_build(request).id
 
-    runner = CliRunner()
+    runner = cli_runner()
     delete_command = (
         cli.commands["pipeline"].commands["builds"].commands["delete"]
     )
@@ -497,7 +540,7 @@ def test_pipeline_build_delete(clean_client: "Client"):
 def test_pipeline_snapshot_delete(clean_client: "Client"):
     """Test that `zenml pipeline snapshots delete` works as expected."""
     snapshot_id = pipeline_instance.create_snapshot(name="test_snapshot").id
-    runner = CliRunner()
+    runner = cli_runner()
     delete_command = (
         cli.commands["pipeline"].commands["snapshot"].commands["delete"]
     )

@@ -34,6 +34,10 @@ Choose one of the paths below. The same ZenML pipeline pattern works for all of 
 
 Use large language models, prompts, and tools to build intelligent autonomous agents that can reason, take action, and interact with your systems.
 
+{% hint style="info" %}
+**Two ways to run agents.** This path runs your agent *inside a pipeline*, which is ideal for batch workloads and evaluation. If the agent itself runs in production, use [Kitaru](https://docs.zenml.io/kitaru): it records every model and tool call as a durable checkpoint, so you can replay a real run faithfully with one thing changed (a cheaper model, a different prompt), diff the two, and keep the version that wins. The two compose: a Kitaru flow is a dynamic ZenML pipeline, so agents and the pipelines that evaluate them share the same stacks and UI.
+{% endhint %}
+
 ### Architecture example
 
 ```mermaid
@@ -92,6 +96,7 @@ Then follow the guide in [`examples/deploying_agent`](https://github.com/zenml-i
 ### Related examples
 
 - **[agent_outer_loop](https://github.com/zenml-io/zenml/tree/main/examples/agent_outer_loop)**: Combine ML classifiers with agents for hybrid intelligent systems
+- **[agentic_hitl_pipeline](https://github.com/zenml-io/zenml/tree/main/examples/agentic_hitl_pipeline)**: Add dynamic fan-out and human approval to an agent workflow
 - **[agent_comparison](https://github.com/zenml-io/zenml/tree/main/examples/agent_comparison)**: Compare different agent architectures and LLM providers
 - **[agent_framework_integrations](https://github.com/zenml-io/zenml/tree/main/examples/agent_framework_integrations)**: Integrate with popular agent frameworks
 - **[llm_finetuning](https://github.com/zenml-io/zenml/tree/main/examples/llm_finetuning)**: Fine-tune LLMs for specialized tasks
